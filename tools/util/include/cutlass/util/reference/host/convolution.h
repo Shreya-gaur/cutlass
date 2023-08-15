@@ -99,7 +99,7 @@ void Conv2dFprop(
                 int filter_r = r;
                 int filter_s = s;
 
-                if (problem_size.mode == cutlass::conv::Mode::kConvolution) {
+                if (problem_size.mode == cutlass::conv::Mode::kConvolution || problem_size.mode == cutlass::conv::Mode::kRotoeq) {
                   filter_r = problem_size.R - 1 - r;
                   filter_s = problem_size.S - 1 - s;
                 }
@@ -108,10 +108,13 @@ void Conv2dFprop(
                 int w = q * problem_size.stride_w - problem_size.pad_w + filter_s * problem_size.dilation_w;
 
                 if (h >= 0 && h < problem_size.H && w >= 0 && w < problem_size.W) {
-
+				
                   ElementA a = tensor_x.at({n, h, w, c + group_idx * channels_per_group});
-                  ElementB b = tensor_w.at({k, r, s, c});
-
+				  ElementB b;
+                  if (problem_size.mode == cutlass::conv::Mode::kRotoeq)
+                 	 b = tensor_w.at({k, problem_size.R - 1 - r, problem_size.S - 1 - s, c});
+				  else b = tensor_w.at({k, r, s, c});
+				
                   acc = inner_product_op(ElementAccumulator(a), ElementAccumulator(b), acc);
 
                 }

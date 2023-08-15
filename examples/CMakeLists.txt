@@ -38,6 +38,7 @@ function(cutlass_example_add_executable NAME)
   set(options)
   set(oneValueArgs DISABLE_TESTS)
   set(multiValueArgs DEPENDS DEPENDEES TEST_COMMAND_OPTIONS)
+  set(CMAKE_C_FLAGS_DEBUG "-g -DDEBUG")
   cmake_parse_arguments(_ "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
   if (NOT DEFINED __DISABLE_TESTS)
@@ -132,6 +133,7 @@ foreach(EXAMPLE
   49_hopper_gemm_with_collective_builder
   50_hopper_gemm_with_epilogue_swizzle
   51_hopper_gett
+  52_volta_simt_conv2dfprop
   )
 
   add_subdirectory(${EXAMPLE})

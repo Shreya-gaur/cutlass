@@ -231,8 +231,18 @@ public:
 
     int k = offset_k_[iteration_strided_];
     int c = filter_c_ + iteration_vector_ * AccessType::kElements;
+	
+	//SHRGAUR TD Insert the ReqEq part here.
+	
+	int r = filter_r_;
+	int s = filter_s_;
 
-    return TensorCoord(k, filter_r_, filter_s_, c);
+    if (problem_size_.mode == Mode::kRotoeq) {
+      r = (problem_size_.R - 1 - filter_r_);
+      s = (problem_size_.S - 1 - filter_s_);
+    }
+
+    return TensorCoord(k, r, s, c);
   }
 
   /// Returns true if the current coordinate is within the activations tensor W

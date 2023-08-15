@@ -93,7 +93,8 @@ enum class Operator {
 /// Distinguishes convolution from cross correlation
 enum class Mode {
   kCrossCorrelation,
-  kConvolution
+  kConvolution, //SHRGAUR TD - Insert kReqEq here
+  kRotoeq
 };
 
 /// Selects among several implementation variants trading off performance with simplicity

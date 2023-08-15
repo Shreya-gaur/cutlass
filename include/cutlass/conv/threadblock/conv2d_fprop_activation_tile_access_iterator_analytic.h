@@ -237,10 +237,12 @@ public:
     int r = filter_r_;
     int s = filter_s_;
 
-    if (problem_size_.mode == Mode::kConvolution) {
+    if (problem_size_.mode == Mode::kConvolution || problem_size_.mode == Mode::kRotoeq) {
       r = (problem_size_.R - 1 - filter_r_);
       s = (problem_size_.S - 1 - filter_s_);
     }
+
+	//SHRGAUR TD --> Here the activation tensor elements pulled should be the same, therefore no change.
 
     int h = p * problem_size_.stride_h - problem_size_.pad_h + r * problem_size_.dilation_h;
     int w = q * problem_size_.stride_w - problem_size_.pad_w + s * problem_size_.dilation_w;
