@@ -111,12 +111,10 @@ void Conv2dFprop(
 				
                   ElementA a = tensor_x.at({n, h, w, c + group_idx * channels_per_group});
 				  ElementB b;
-                  if (problem_size.mode == cutlass::conv::Mode::kRotoeq)
-                 	 b = tensor_w.at({k, problem_size.R - 1 - r, problem_size.S - 1 - s, c});
-				  else b = tensor_w.at({k, r, s, c});
-				
+				  
+				  b = tensor_w.at({k, r, s, c});
                   acc = inner_product_op(ElementAccumulator(a), ElementAccumulator(b), acc);
-
+	
                 }
               }
             }
@@ -130,11 +128,157 @@ void Conv2dFprop(
           }
 
           tensor_y_out.at(cutlass::make_Coord(n, p, q, k)) =
-              convert_op(alpha * ElementCompute(acc) + beta * ElementCompute(c_ref));
+				  convert_op(alpha * ElementCompute(acc) + beta * ElementCompute(c_ref));
+		  
+      	}	
+      }
+  	}
+  }	
+  std::cout << "Done with this!" << std::endl;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+/// Forward propagation Rotation Equivariant Convolution kernel
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// y = conv2d(x, w)
+template <
+  typename ElementA,
+  typename LayoutA,
+  typename ElementB,
+  typename LayoutB,
+  typename ElementC,
+  typename LayoutC,
+  typename ElementCompute,
+  typename ElementAccumulator = ElementCompute,
+  typename ElementD = ElementC,
+  typename ConvertOp = NumericConverter<ElementD, ElementCompute>,
+  typename InnerProductOp = multiply_add<ElementAccumulator>
+>
+void Conv2dFpropEq(
+  conv::Conv2dProblemSize problem_size,
+  TensorRef<ElementA, LayoutA> tensor_x,
+  TensorRef<ElementB, LayoutB> tensor_w,
+  TensorRef<ElementB, LayoutB> tensor_w_ro,
+  TensorRef<ElementC, LayoutC> tensor_y_in,
+  TensorRef<ElementD, LayoutC> tensor_y_out,
+  ElementCompute alpha,
+  ElementCompute beta) {
+
+  ConvertOp convert_op;
+  InnerProductOp inner_product_op;
+
+  std::stringstream ss;
+  ss << "52_volta_simt_workspace_conv2dfprop_rotated_filter" <<".dat";
+
+  std::ofstream output_workspace(ss.str());
+							
+  for (int k = 0; k < problem_size.K; ++k){
+	for (int r = 0; r < problem_size.R; ++r){
+	  for (int s = 0; s < problem_size.S; ++s){
+		for (int c = 0; c < problem_size.C; ++c){
+			tensor_w_ro.at({2*k, r, s, c}) = tensor_w.at({k, r, s, c});
+			int rotated_r = problem_size.R - 1 - r;
+			int rotated_s = problem_size.S - 1 - s;
+			tensor_w_ro.at({((2*k)+ 1), r, s, c}) = tensor_w.at({k, rotated_r, rotated_s, c});
+		}
+	  }
+	}	  
+  }
+
+  output_workspace << "\nRotated Filters = \n";
+
+  for (int k = 0; k < problem_size.K; ++k ){
+	output_workspace << "\nFilter " << k << "\n";
+	 for (int c = 0; c < problem_size.C; ++c){
+		output_workspace << "\nChannel " << c << "\n"; 	 
+    	for (int r = 0; r < problem_size.R; ++r){
+	       for (int s = 0; s < problem_size.S; ++s){
+			output_workspace << tensor_w_ro.at({k, r, s, c}) << ", ";
+		 }					
+	  }
+	}	  
+  }
+
+  output_workspace << "\nFilters = \n";
+
+  for (int k = 0; k < problem_size.K; ++k ){
+    output_workspace << "\nFilter " << k << "\n";
+     for (int c = 0; c < problem_size.C; ++c){
+    	output_workspace << "\nChannel " << c << "\n"; 	 
+    	for (int r = 0; r < problem_size.R; ++r){
+           for (int s = 0; s < problem_size.S; ++s){
+    		output_workspace << tensor_w.at({k, r, s, c}) << ", ";
+    	 }					
+      }
+    }	  
+  }
+
+  // Apply MMA and accumulate ElementAccumulator
+  for (int n = 0; n < problem_size.N; ++n) {
+    for (int p = 0; p < problem_size.P; ++p) {
+      for (int q = 0; q < problem_size.Q; ++q) {
+        for (int k = 0; k < (problem_size.K * 2) ; ++k) {
+
+          int group_idx = k / (((problem_size.K) * 2) / problem_size.groups);
+          int channels_per_group = problem_size.C / problem_size.groups;
+
+          ElementAccumulator acc = ElementAccumulator();
+
+          for (int r = 0; r < problem_size.R; ++r) {
+            for (int s = 0; s < problem_size.S; ++s) {
+              for (int c = 0; c < channels_per_group; ++c) {
+
+                int filter_r = r;
+                int filter_s = s;
+
+                if (problem_size.mode == cutlass::conv::Mode::kConvolution || problem_size.mode == cutlass::conv::Mode::kRotoeq) {
+                  filter_r = problem_size.R - 1 - r;
+                  filter_s = problem_size.S - 1 - s;
+                }
+
+                int h = p * problem_size.stride_h - problem_size.pad_h + filter_r * problem_size.dilation_h;
+                int w = q * problem_size.stride_w - problem_size.pad_w + filter_s * problem_size.dilation_w;
+
+                if (h >= 0 && h < problem_size.H && w >= 0 && w < problem_size.W) {
+				
+                  ElementA a = tensor_x.at({n, h, w, c + group_idx * channels_per_group});
+				  ElementB b = tensor_w_ro.at({k, r, s, c});
+                  acc = inner_product_op(ElementAccumulator(a), ElementAccumulator(b), acc);
+                }
+              }
+            }
+          }
+
+          // Apply Epilogue, compute ElementCompute, convert and store ElementC
+          ElementC c_ref = ElementC();
+
+          if (beta != ElementCompute()) {
+            c_ref = tensor_y_in.at(cutlass::make_Coord(n, p, q, k));
+          }
+
+          tensor_y_out.at(cutlass::make_Coord(n, p, q, k)) =
+           	 convert_op(alpha * ElementCompute(acc) + beta * ElementCompute(c_ref));
+		  }
         }
       }
     }
+
+  output_workspace << "\nCPU Computed = \n";
+  for (int n = 0; n < problem_size.N; ++n){
+    output_workspace << "\nBatch " << n << "\n";
+     for (int k = 0; k < problem_size.K * 2; ++k){
+   		 output_workspace << "\nChannel " << k << "\n"; 	 
+  	   for (int p = 0; p < problem_size.P; ++p){
+  		 for (int q = 0; q < problem_size.Q; ++q){
+ 			 output_workspace << tensor_y_out.at({n, p, q, k}) << ", ";
+    	 }					
+      }
+    }	  
   }
+
+  std::cout << "Results written to '" << ss.str() << "'." << std::endl;
+  std::cout << "Done with this!" << std::endl;
 }
 
 /// Depthwise-separable convolution
@@ -772,9 +916,6 @@ void Conv3d(
       ElementAccumulator, 
       ConvertOp, InnerProductOp
     >(problem_size, tensor_A, tensor_B, tensor_C, tensor_D, alpha, beta);
-    break;
-
-  case conv::Operator::kWgrad:
     Conv3dWgrad<
       ElementA, LayoutA,
       ElementB, LayoutB,
