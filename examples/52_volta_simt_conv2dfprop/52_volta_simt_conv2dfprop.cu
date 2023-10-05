@@ -220,7 +220,7 @@ struct Options {
     }
 
 	if (rotate_filter){
-	  rotated_filter_size.n() = filter_size.n() * 2;
+	  rotated_filter_size.n() = filter_size.n() * 4;
 	  rotated_filter_size.h() = filter_size.h();
 	  rotated_filter_size.w() = filter_size.w();
 	  rotated_filter_size.c() = filter_size.c();
@@ -228,7 +228,7 @@ struct Options {
 	  output_ro.n() = input_size.n();
 	  output_ro.h() = (input_size.h() + padding.n() + padding.h() - filter_size.h()) / conv_stride.row() + 1;
       output_ro.w() = (input_size.w() + padding.w() + padding.c() - filter_size.w()) / conv_stride.column() + 1;
-	  output_ro.c() = filter_size.n() * 2; 
+	  output_ro.c() = filter_size.n() * 4; 
 
 	  std::cout<<"Rotated Output Dimensions"<< "\n";
 	  

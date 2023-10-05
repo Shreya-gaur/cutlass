@@ -177,10 +177,15 @@ void Conv2dFpropEq(
 	for (int r = 0; r < problem_size.R; ++r){
 	  for (int s = 0; s < problem_size.S; ++s){
 		for (int c = 0; c < problem_size.C; ++c){
-			tensor_w_ro.at({2*k, r, s, c}) = tensor_w.at({k, r, s, c});
+		//	tensor_w_ro.at({2*k, r, s, c}) = tensor_w.at({k, r, s, c});
 			int rotated_r = problem_size.R - 1 - r;
 			int rotated_s = problem_size.S - 1 - s;
-			tensor_w_ro.at({((2*k)+ 1), r, s, c}) = tensor_w.at({k, rotated_r, rotated_s, c});
+		//	tensor_w_ro.at({((2*k)+ 1), r, s, c}) = tensor_w.at({k, rotated_r, rotated_s, c});
+		
+			tensor_w_ro.at({4*k, r, s, c}) = tensor_w.at({k, r, s, c});
+			tensor_w_ro.at({((4*k)+ 1), r, s, c}) = tensor_w.at({k, rotated_s, r, c}); //Calculates 90 degree shift
+			tensor_w_ro.at({((4*k)+ 2), r, s, c}) = tensor_w.at({k, s, rotated_r, c}); //Calculates -90 degree shift
+			tensor_w_ro.at({((4*k)+ 3), r, s, c}) = tensor_w.at({k, rotated_r, rotated_s, c});
 		}
 	  }
 	}	  
@@ -188,7 +193,7 @@ void Conv2dFpropEq(
 
   output_workspace << "\nRotated Filters = \n";
 
-  for (int k = 0; k < problem_size.K; ++k ){
+  for (int k = 0; k < problem_size.K * 4; ++k ){
 	output_workspace << "\nFilter " << k << "\n";
 	 for (int c = 0; c < problem_size.C; ++c){
 		output_workspace << "\nChannel " << c << "\n"; 	 
@@ -218,9 +223,9 @@ void Conv2dFpropEq(
   for (int n = 0; n < problem_size.N; ++n) {
     for (int p = 0; p < problem_size.P; ++p) {
       for (int q = 0; q < problem_size.Q; ++q) {
-        for (int k = 0; k < (problem_size.K * 2) ; ++k) {
+        for (int k = 0; k < (problem_size.K * 4) ; ++k) {
 
-          int group_idx = k / (((problem_size.K) * 2) / problem_size.groups);
+          int group_idx = k / (((problem_size.K) * 4) / problem_size.groups);
           int channels_per_group = problem_size.C / problem_size.groups;
 
           ElementAccumulator acc = ElementAccumulator();
@@ -267,7 +272,7 @@ void Conv2dFpropEq(
   output_workspace << "\nCPU Computed = \n";
   for (int n = 0; n < problem_size.N; ++n){
     output_workspace << "\nBatch " << n << "\n";
-     for (int k = 0; k < problem_size.K * 2; ++k){
+     for (int k = 0; k < problem_size.K * 4; ++k){
    		 output_workspace << "\nChannel " << k << "\n"; 	 
   	   for (int p = 0; p < problem_size.P; ++p){
   		 for (int q = 0; q < problem_size.Q; ++q){
